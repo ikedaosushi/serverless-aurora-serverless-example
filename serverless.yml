@@ -2,6 +2,7 @@ service: serverless-aurora-serverless-example
 
 plugins:
   - serverless-python-requirements
+
 custom:
   default_stage: dev
   default_timeout: 30
@@ -15,7 +16,7 @@ custom:
       - ":cluster:"
       - !Ref Aurora
   pythonRequirements:
-    layer: true
+    usePipenv: true
     noDeploy: [pytest, jmespath, docutils, pip, python-dateutil, setuptools, s3transfer, six]
 
 provider:
@@ -79,7 +80,7 @@ resources:
         ScalingConfiguration:
           AutoPause: true
           MaxCapacity: 8
-          MinCapacity: 2
+          MinCapacity: 1
           SecondsUntilAutoPause: 3600
     DBClusterParameterGroup:
       Type: AWS::RDS::DBClusterParameterGroup
