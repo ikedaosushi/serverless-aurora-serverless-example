@@ -1,0 +1,95 @@
+service: serverless-aurora-serverless-example
+
+plugins:
+  - serverless-python-requirements
+custom:
+  default_stage: dev
+  default_timeout: 30
+  region: us-east-1
+  stage: ${opt:stage, self:custom.default_stage}
+  db_id: ${self:service}-db-${self:custom.stage}
+  db_cluster_arn: !Join
+    - ""
+    - - "arn:aws:rds:${self:custom.region}:"
+      - !Ref AWS::AccountId
+      - ":cluster:"
+      - !Ref Aurora
+  pythonRequirements:
+    layer: true
+    noDeploy: [pytest, jmespath, docutils, pip, python-dateutil, setuptools, s3transfer, six]
+
+provider:
+  name: aws
+  runtime: python3.7
+  stage: ${self:custom.stage}
+  region: ${self:custom.region}
+  timeout: ${self:custom.default_timeout}
+  environment:
+    DB_CLST_ARN: ${self:custom.db_cluster_arn}
+    SECRET_ARN: !Ref SecretAurora
+    TEST: !Ref AWS::AccountId
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - "dbqms:CreateFavoriteQuery"
+        - "dbqms:DescribeFavoriteQueries"
+        - "dbqms:UpdateFavoriteQuery"
+        - "dbqms:DeleteFavoriteQueries"
+        - "dbqms:GetQueryString"
+        - "dbqms:CreateQueryHistory"
+        - "dbqms:DescribeQueryHistory"
+        - "dbqms:UpdateQueryHistory"
+        - "dbqms:DeleteQueryHistory"
+        - "dbqms:DescribeQueryHistory"
+        - "rds-data:ExecuteSql"
+        - "secretsmanager:*"
+        - "tag:GetResources"
+      Resource: "*"
+
+functions:
+  setup:
+    handler: handler.setup
+  index:
+    handler: handler.index
+    events:
+      - http:
+          path: index
+          method: get
+          cors: true
+
+resources:
+  Resources:
+    SecretAurora:
+      Type: AWS::SecretsManager::Secret
+      Properties:
+        GenerateSecretString:
+          SecretStringTemplate: '{"username": "admin"}'
+          GenerateStringKey: 'password'
+          PasswordLength: 16
+          ExcludeCharacters: '"@/\'
+    Aurora:
+      Type: AWS::RDS::DBCluster
+      Properties:
+        DBClusterParameterGroupName: !Ref DBClusterParameterGroup
+        DBClusterIdentifier: ${self:custom.db_id}
+        MasterUsername: !Join ['', ['{{resolve:secretsmanager:', !Ref SecretAurora, ':SecretString:username}}' ]]
+        MasterUserPassword: !Join ['', ['{{resolve:secretsmanager:', !Ref SecretAurora, ':SecretString:password}}' ]]
+        Engine: aurora
+        EngineMode: serverless
+        ScalingConfiguration:
+          AutoPause: true
+          MaxCapacity: 8
+          MinCapacity: 2
+          SecondsUntilAutoPause: 3600
+    DBClusterParameterGroup:
+      Type: AWS::RDS::DBClusterParameterGroup
+      Properties:
+        Description: A parameter group for ${self:service}-db-${self:custom.stage}
+        Family: aurora5.6
+        Parameters:
+          character_set_client: utf8mb4
+          character_set_connection: utf8mb4
+          character_set_database: utf8mb4
+          character_set_results: utf8mb4
+          character_set_server: utf8mb4
+          time_zone: Asia/Tokyo
